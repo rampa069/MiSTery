@@ -79,8 +79,10 @@ reg scanline;
 reg [5:0] r;
 reg [5:0] g;
 reg [5:0] b;
+reg hs_sd_d;
+reg vs_sd_d;
 
-always @(*) begin
+always @(posedge clk_sys) begin
 	if (COLOR_DEPTH == 6) begin
 		b = sd_out[5:0];
 		g = sd_out[11:6];
@@ -98,6 +100,8 @@ always @(*) begin
 		g = { sd_out[COLOR_DEPTH*2-1:COLOR_DEPTH], sd_out[COLOR_DEPTH*2-1 -:(6-COLOR_DEPTH)] };
 		r = { sd_out[COLOR_DEPTH*3-1:COLOR_DEPTH*2], sd_out[COLOR_DEPTH*3-1 -:(6-COLOR_DEPTH)] };
 	end
+	hs_sd_d<=hs_sd;
+	vs_sd_d<=vs_sd;
 end
 
 always @(posedge clk_sys) begin
@@ -105,17 +109,17 @@ always @(posedge clk_sys) begin
 		r_out <= r;
 		g_out <= g;
 		b_out <= b;
-		hs_out <= hs_sd;
-		vs_out <= vs_sd;
+		hs_out <= hs_sd_d;
+		vs_out <= vs_sd_d;
 	end else if(ce_x2) begin
-		hs_out <= hs_sd;
-		vs_out <= vs_sd;
+		hs_out <= hs_sd_d;
+		vs_out <= vs_sd_d;
 
 		// reset scanlines at every new screen
 		if(vs_out != vs_in) scanline <= 0;
 
 		// toggle scanlines at begin of every hsync
-		if(hs_out && !hs_sd) scanline <= !scanline;
+		if(hs_out && !hs_sd_d) scanline <= !scanline;
 
 		// if no scanlines or not a scanline
 		if(!scanline || !scanlines) begin

@@ -2,7 +2,7 @@
 /* Atari ST/STe/Mega STe core MiST toplevel */
 /********************************************/
 
-module mist_top ( 
+module mistery_top ( 
 	// clock inputs
 	input wire   [ 2-1:0] CLOCK_27,   // 27 MHz
 	// LED outputs
@@ -32,13 +32,18 @@ module mist_top (
 	output wire           AUDIO_L,    // sigma-delta DAC output left
 	output wire           AUDIO_R,    // sigma-delta DAC output right
 	// SPI
-	inout wire            SPI_DO,
+	input wire            SPI_DO_IN,
+	output wire           SPI_DO,
 	input wire            SPI_DI,
 	input wire            SPI_SCK,
 	input wire            SPI_SS2,    // fpga
 	input wire            SPI_SS3,    // OSD
 	input wire            SPI_SS4,    // "sniff" mode
-	input wire            CONF_DATA0  // SPI_SS for user_io
+	input wire            CONF_DATA0,  // SPI_SS for user_io
+	input wire            PS2K_CLK,
+	input wire            PS2K_DAT,
+	input wire            PS2M_CLK,
+	input wire            PS2M_DAT
 );
 
 /* ------------------------------------------------------------------------------ */
@@ -67,7 +72,7 @@ wire mainclock;
 clock32 clock32 (
 	.inclk0     (CLOCK_27[0]),
 	.c0         (mainclock  ),
-	.c1         (SDRAM_CLK  )
+	.c1			(SDRAM_CLK  )
 );
 
 clock clock (
@@ -76,6 +81,7 @@ clock clock (
   .c1           (clk_32     ), // output clock c1 (32MHz)
   .c2           (clk_128    ), // output clock c2 (128MHz)
   .c3           (clk_2      ), // output clock c3 (2MHz)
+//  .c4           (SDRAM_CLK  ), // output clock c4 (96MHz, phase shifted)
   .locked       (pll_locked )  // pll locked output
 );
 
@@ -239,7 +245,7 @@ wire        dio_download;
 
 wire [31:0] system_ctrl;
 
-wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO;
+wire        spi_din = SPI_SS4 ? SPI_DI : SPI_DO_IN;
 
 data_io data_io (
 	.sck             ( SPI_SCK             ),
@@ -311,10 +317,17 @@ wire [7:0] eth_rx_write_byte;
 wire eth_rx_write_strobe, eth_rx_write_begin;
 
 // ps2 keyboard-mouse emulation
+`ifdef HAVE_PS2
 wire ps2_kbd_clk;
 wire ps2_kbd_data;
 wire ps2_mouse_clk;
 wire ps2_mouse_data;
+`else
+reg ps2_kbd_clk;
+reg ps2_kbd_data;
+reg ps2_mouse_clk;
+reg ps2_mouse_data;
+`endif
 
 wire [2:0] switches;
 wire scandoubler_disable;
@@ -381,12 +394,14 @@ user_io user_io(
 	.eth_rx_write_strobe         (eth_rx_write_strobe),
 	.eth_rx_write_byte           (eth_rx_write_byte),
 
+`ifndef HAVE_PS2
 	// PS2 keyboard data
 	.ps2_kbd_clk                 (ps2_kbd_clk),
 	.ps2_kbd_data                (ps2_kbd_data),
 	// PS2 mouse data
 	.ps2_mouse_clk               (ps2_mouse_clk),
 	.ps2_mouse_data              (ps2_mouse_data),
+`endif
 
 	// sd-card IO
 	.sd_lba                      (sd_lba        ),
@@ -419,6 +434,27 @@ user_io user_io(
 localparam TG68K_ENABLE = 1'b0;
 `else
 localparam TG68K_ENABLE = 1'b1;
+`endif
+
+
+`ifdef HAVE_PS2	
+// Synchronise PS/2 signals
+reg ps2_kbd_clk_d;
+reg ps2_kbd_data_d;
+reg ps2_mouse_clk_d;
+reg ps2_mouse_data_d;
+
+always @(posedge clk_96) begin
+	ps2_kbd_clk_d <= PS2K_CLK;
+	ps2_kbd_clk <= ps2_kbd_clk_d;
+	ps2_kbd_data_d <= PS2K_DAT;
+	ps2_kbd_data <= ps2_kbd_data_d;
+	ps2_mouse_clk_d <= PS2M_CLK;
+	ps2_mouse_clk <= ps2_mouse_clk_d;
+	ps2_mouse_data_d <= PS2M_DAT;
+	ps2_mouse_data <= ps2_mouse_data_d;
+end
+
 `endif
 
 atarist_sdram #(TG68K_ENABLE) atarist(

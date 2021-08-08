@@ -1,5 +1,11 @@
 # MiSTery - An Atari ST/STe core for the [MiST board](https://github.com/mist-devel/mist-board/wiki)
 
+Initial Port to Turbo Chameleon 64 by Alastair M. Robinson.
+
+## Limitations of the TC64 port:
+- No TG68 (68020) - only the cycle-accurate FX68K core is supported.
+- No hard drive support yet - coming soon!
+
 ## Features:
 
 - Cycle accurate STe GLUE+MMU combo (re-created from the [original schematics](https://www.chzsoft.de/asic-web/))

@@ -1,48 +1,61 @@
-### programs ###
-MAP=quartus_map
-FIT=quartus_fit
-ASM=quartus_asm
-PGM=quartus_pgm
+DEMISTIFYPATH=DeMiSTify
+SUBMODULES=$(DEMISTIFYPATH)/EightThirtyTwo/lib832/lib832.a
+PROJECT=MiSTery
+PROJECTPATH=./
+PROJECTTOROOT=../
+BOARD=
+ROMSIZE1=8192
+ROMSIZE2=8192
 
-### project ###
-PROJECT=mist
+all: $(DEMISTIFYPATH)/site.mk $(SUBMODULES) firmware init compile tns mist
 
-TODAY = `date +"%m/%d/%y"`
+$(DEMISTIFYPATH)/site.mk: $(DEMISTIFYPATH)/site.template
+	$(info ******************************************************)
+	$(info Please copy the example DeMiSTify/site.template file to)
+	$(info DeMiSTify/site.mk and edit the paths for the version(s))
+	$(info of Quartus you have installed.)
+	$(info *******************************************************)
+	$(error site.mk not found.)
 
-### build rules ###
+$(DEMISTIFYPATH)/site.template:
+	git submodule update --init --recursive
 
-# all
-all:
-	@echo Making FPGA programming files ...
-	@make map
-	@make fit
-	@make asm
+include $(DEMISTIFYPATH)/site.mk
 
-map:
-	@echo Running mapper ...
-	@$(MAP) $(PROJECT)
+$(DEMISTIFYPATH)/EightThirtyTwo/Makefile:
+	git submodule update --init --recursive
 
-fit:
-	@echo Running fitter ...
-	@$(FIT) $(PROJECT)
+$(SUBMODULES): $(DEMISTIFYPATH)/EightThirtyTwo/Makefile
+	make -C $(DEMISTIFYPATH) -f bootstrap.mk
 
-asm:
-	@echo Running assembler ...
-	@$(ASM) $(PROJECT)
+.PHONY: firmware
+firmware: $(SUBMODULES)
+	make -C firmware -f ../$(DEMISTIFYPATH)/firmware/Makefile DEMISTIFYPATH=../$(DEMISTIFYPATH) ROMSIZE1=$(ROMSIZE1) ROMSIZE2=$(ROMSIZE2)
 
-run: 
-	@$(PGM) -c USB-Blaster -m jtag -o "p;./out/$(PROJECT).sof"
+.PHONY: firmware_clean
+firmware_clean: $(SUBMODULES)
+	make -C firmware -f ../$(DEMISTIFYPATH)/firmware/Makefile DEMISTIFYPATH=../$(DEMISTIFYPATH) ROMSIZE1=$(ROMSIZE1) ROMSIZE2=$(ROMSIZE2) clean
 
-run2: 
-	@$(PGM) -c USB-Blaster\(Altera\) -m jtag -o "p;./out/$(PROJECT).sof"
+.PHONY: init
+init:
+	make -f $(DEMISTIFYPATH)/Makefile DEMISTIFYPATH=$(DEMISTIFYPATH) PROJECTTOROOT=$(PROJECTTOROOT) PROJECTPATH=$(PROJECTPATH) PROJECTS=$(PROJECT) BOARD=$(BOARD) init 
 
-# clean
+.PHONY: compile
+compile: 
+	make -f $(DEMISTIFYPATH)/Makefile DEMISTIFYPATH=$(DEMISTIFYPATH) PROJECTTOROOT=$(PROJECTTOROOT) PROJECTPATH=$(PROJECTPATH) PROJECTS=$(PROJECT) BOARD=$(BOARD) compile
+
+.PHONY: clean
 clean:
-	@echo clean
-	@rm -rf ./out/
-	@rm -rf ./db/
-	@rm -rf ./incremental_db/
+	make -f $(DEMISTIFYPATH)/Makefile DEMISTIFYPATH=$(DEMISTIFYPATH) PROJECTTOROOT=$(PROJECTTOROOT) PROJECTPATH=$(PROJECTPATH) PROJECTS=$(PROJECT) BOARD=$(BOARD) clean
 
-release:
-	make
-	cd ./out; cp mist.rbf ../../../bin/cores/mist/core.rbf
+.PHONY: tns
+tns:
+	@for BOARD in ${BOARDS}; do \
+		echo $$BOARD; \
+		grep -r Design-wide\ TNS $$BOARD/*.rpt; \
+	done
+
+.PHONY: mist
+mist:
+	$(Q13)/quartus_sh --flow compile mist/mist.qpf
+
