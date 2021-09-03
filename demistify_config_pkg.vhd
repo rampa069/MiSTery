@@ -61,7 +61,7 @@ COMPONENT mistery_top
 		VGA_G		:	 OUT STD_LOGIC_VECTOR(5 DOWNTO 0);
 		VGA_B		:	 OUT STD_LOGIC_VECTOR(5 DOWNTO 0);
 		UART_TX	:	OUT STD_LOGIC;
-		UART_RX	:	IN STD_LOGIC;
+		UART_RX	:	IN STD_LOGIC := '1';
 		AUDIO_L  : out std_logic;
 		AUDIO_R  : out std_logic;
 		PS2K_CLK : in std_logic;

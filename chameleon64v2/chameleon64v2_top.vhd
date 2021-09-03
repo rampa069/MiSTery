@@ -127,7 +127,10 @@ architecture rtl of chameleon64v2_top is
 	signal phi2 : std_logic;
 	
 -- Global signals
+	signal reset : std_logic;
 	signal reset_n : std_logic;
+	signal reset_50 : std_logic;
+	signal reset_100 : std_logic;
 
 -- LEDs
 	signal led_green : std_logic;
@@ -268,6 +271,27 @@ begin
 			ena_1khz => ena_1khz
 		);
 	
+	-- Reset handling
+
+	myReset : entity work.gen_reset
+		generic map (
+			resetCycles => reset_cycles
+		)
+		port map (
+			clk => clk50m,
+			enable => '1',
+			button => not (pll_locked and reset_btn),
+			reset => reset_50
+		);
+	
+	process(clk_100,reset_50)
+	begin
+		if rising_edge(clk_100) then
+			reset_100<=reset_50;
+			reset<=reset_100;
+		end if;
+	end process;
+
 -- -----------------------------------------------------------------------
 -- PS2IEC multiplexer
 -- -----------------------------------------------------------------------
@@ -473,11 +497,11 @@ port map (
 	generic map (
 		sysclk_frequency => 500,
 		debug => false,
-		jtag_uart => true
+		jtag_uart => false
 	)
 	port map (
 		clk => clk_50,
-		reset_in => reset_btn,
+		reset_in => not reset,
 		reset_out => reset_n,
 
 		-- SPI signals

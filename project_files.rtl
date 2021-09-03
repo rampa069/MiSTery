@@ -6,6 +6,8 @@ mist/data_io.v
 mist/vidclkcntrl.qip
 atarist/atarist.qip
 
+MiSTery.sdc
+
 # The controller module
 DeMiSTify/controller/controller.qip
 demistify_config_pkg.vhd

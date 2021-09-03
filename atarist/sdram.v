@@ -92,7 +92,7 @@ end
 // wait 1ms (32 8Mhz cycles) after FPGA config is done before going
 // into normal operation. Initialize the ram in the last 16 reset cycles (cycles 15-0)
 reg [4:0] reset;
-always @(posedge clk_96, posedge init) begin
+always @(posedge clk_96 or posedge init) begin
 	if(init)	reset <= 5'h1f;
 	else if((t == STATE_LAST) && (reset != 0))
 		reset <= reset - 5'd1;
