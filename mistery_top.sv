@@ -317,17 +317,15 @@ wire [7:0] eth_rx_write_byte;
 wire eth_rx_write_strobe, eth_rx_write_begin;
 
 // ps2 keyboard-mouse emulation
-`ifdef HAVE_PS2
-wire ps2_kbd_clk;
-wire ps2_kbd_data;
-wire ps2_mouse_clk;
-wire ps2_mouse_data;
-`else
 reg ps2_kbd_clk;
 reg ps2_kbd_data;
 reg ps2_mouse_clk;
 reg ps2_mouse_data;
-`endif
+
+wire ps2_kbd_clk_uio;
+wire ps2_kbd_data_uio;
+wire ps2_mouse_clk_uio;
+wire ps2_mouse_data_uio;
 
 wire [2:0] switches;
 wire scandoubler_disable;
@@ -394,14 +392,12 @@ user_io user_io(
 	.eth_rx_write_strobe         (eth_rx_write_strobe),
 	.eth_rx_write_byte           (eth_rx_write_byte),
 
-`ifndef HAVE_PS2
 	// PS2 keyboard data
-	.ps2_kbd_clk                 (ps2_kbd_clk),
-	.ps2_kbd_data                (ps2_kbd_data),
+	.ps2_kbd_clk                 (ps2_kbd_clk_uio),
+	.ps2_kbd_data                (ps2_kbd_data_uio),
 	// PS2 mouse data
-	.ps2_mouse_clk               (ps2_mouse_clk),
-	.ps2_mouse_data              (ps2_mouse_data),
-`endif
+	.ps2_mouse_clk               (ps2_mouse_clk_uio),
+	.ps2_mouse_data              (ps2_mouse_data_uio),
 
 	// sd-card IO
 	.sd_lba                      (sd_lba        ),
@@ -436,7 +432,6 @@ localparam TG68K_ENABLE = 1'b0;
 localparam TG68K_ENABLE = 1'b1;
 `endif
 
-
 `ifdef HAVE_PS2	
 // Synchronise PS/2 signals
 reg ps2_kbd_clk_d;
@@ -446,13 +441,22 @@ reg ps2_mouse_data_d;
 
 always @(posedge clk_96) begin
 	ps2_kbd_clk_d <= PS2K_CLK;
-	ps2_kbd_clk <= ps2_kbd_clk_d;
+	ps2_kbd_clk <= ps2_kbd_clk_d & ps2_kbd_clk_uio;
 	ps2_kbd_data_d <= PS2K_DAT;
-	ps2_kbd_data <= ps2_kbd_data_d;
+	ps2_kbd_data <= ps2_kbd_data_d & ps2_kbd_data_uio;
 	ps2_mouse_clk_d <= PS2M_CLK;
 	ps2_mouse_clk <= ps2_mouse_clk_d;
 	ps2_mouse_data_d <= PS2M_DAT;
 	ps2_mouse_data <= ps2_mouse_data_d;
+end
+
+`else
+
+always @(*) begin
+	ps2_kbd_clk <= ps2_kbd_clk_uio;
+	ps2_kbd_data <= ps2_kbd_data_uio;
+	ps2_mouse_clk <= ps2_mouse_clk_uio;
+	ps2_mouse_data <= ps2_mouse_data_uio;
 end
 
 `endif

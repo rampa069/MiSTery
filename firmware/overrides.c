@@ -17,7 +17,11 @@
 #include "font.h"
 #include "cue_parser.h"
 #include "pcecd.h"
+#include "timer.h"
+#include "diskimg.h"
+#include "spi_sd.h"
 
+#include "c64keys.c"
 
 #define MIST_SET_CONTROL 0x04
 
@@ -100,6 +104,7 @@ unsigned char joy_keymap[]=
 #define DIRECTUPLOAD 0x10
 
 /* Initial ROM */
+int LoadROM(const char *fn);
 const char *bootrom_name="TOS     IMG";
 extern unsigned char coretype;
 extern unsigned char romtype;
@@ -131,7 +136,7 @@ void clearram(int size)
 }
 
 
-void setromtype(char *filename)
+void setromtype(const char *filename)
 {
 	if(FileOpen(&file,filename))
 	{
@@ -177,7 +182,7 @@ char *autoboot()
 }
 
 void buildmenu(int offset);
-
+#if 0
 unsigned char mouseinit[]=
 {	
 	0xff,
@@ -188,37 +193,172 @@ unsigned char mouseinit[]=
 	0xf2,0x01,
 	0xf4,0
 };
-void handlemouse()
+
+#endif
+
+unsigned char initmouse[]=
+{	
+	0x1,0xff, // Send 1 byte reset sequence
+	0x82,	// Wait for two bytes in return (in addition to the normal acknowledge byte)
+//	1,0xf4,0, // Uncomment this line to leave the mouse in 3-byte mode
+	8,0xf3,200,0xf3,100,0xf3,80,0xf2,1, // Send PS/2 wheel mode knock sequence...
+	0x81,	// Receive device ID (should be 3 for wheel mice)
+	1,0xf4,0	// Enable reporting.
+};
+
+void handlemouse(int reset)
 {
 	int byte;
-	static int resp;
+	static int delay=0;
+	static int timeout;
 	static int init=0;
-	if(!init)
+	static int idx=0;
+	static int txcount=0;
+	static int rxcount=0;
+	if(reset)
+		idx=0;
+
+	if(!CheckTimer(delay))
+		return(0);
+	delay=GetTimer(20);
+
+	if(!idx)
 	{
 		while(PS2MouseRead()>-1)
 			; // Drain the buffer;
-		++init;
-	}
-	else if(init&1)
-	{
-		byte=mouseinit[init>>1];
-		if(byte)
-		{
-//			printf("Sending %x, expecting %d bytes\n",byte,resp);
-			if(byte>1)
-				PS2MouseWrite(byte);
-			++init;
-		}
+		txcount=initmouse[idx++];
+		rxcount=0;
 	}
 	else
 	{
-		byte=PS2MouseRead();
-		if(byte==0xaa || byte==0xfa || byte==0x03)
-			++init;
-//		if(byte>=0)
-//			printf("response: %x\n",byte);
+		if(rxcount)
+		{
+			int q=PS2MouseRead();
+			if(q>-1)
+			{
+//				printf("Received %x\n",q);
+				--rxcount;
+			}
+			else if(CheckTimer(timeout))
+				idx=0;
+	
+			if(!txcount && !rxcount)
+			{
+				int next=initmouse[idx++];
+				if(next&0x80)
+				{
+					rxcount=next&0x7f;
+//					printf("Receiving %x bytes",rxcount);
+				}
+				else
+				{
+					txcount=next;
+//					printf("Sending %x bytes",txcount);
+				}
+			}
+		}
+		else if(txcount)
+		{
+			PS2MouseWrite(initmouse[idx++]);
+			--txcount;
+			rxcount=1;
+			timeout=GetTimer(3500);	//3.5 seconds
+		}
 	}
 }
+#if 0
+void DebugRow(int row, char *info)
+{
+	OsdWriteStart(row,0,0);
+	OsdPutChar(' ');
+	OsdPuts(info);
+	OsdWriteEnd();
+}
+
+char debugtxt[32];
+
+#define HEXDIGIT(x) ('0'+(x) + ((x)>9 ? 'A'-'9'-1 : 0))
+
+void DebugMouse()
+{
+	int txcount;
+	int rxcount;
+	int debugrow;
+	int timeout;
+	int timedout;
+	int timeouts=9;
+	char *debugptr;
+
+	Menu_ShowHide(1);
+
+	while(PS2MouseRead()>-1)
+		; // Drain the buffer;
+
+	while(timeouts)
+	{
+		char *ptr=initmouse;
+
+		strcpy(debugtxt,"  Mouse Debug: ");
+		debugtxt[0]=HEXDIGIT(timeouts);
+		DebugRow(0,debugtxt);
+		memset(debugtxt,0,32);
+		debugrow=1;
+
+		debugptr=debugtxt;
+		txcount=*ptr++;
+		timedout=0;
+		--timeouts;
+		while(txcount && !timedout)
+		{
+			PS2MouseWrite(*ptr++);
+			--txcount;
+			rxcount=1;
+
+			timeout=GetTimer(3500);	//3.5 seconds
+			while(rxcount)
+			{
+				int q=PS2MouseRead();
+				if(q>-1)
+				{
+					printf("Received %x\n",q);
+					*debugptr++=HEXDIGIT(q>>4);
+					*debugptr++=HEXDIGIT(q&15);
+					--rxcount;
+				}
+				else if(CheckTimer(timeout))
+				{
+					timedout=1;
+					*debugptr++='T';
+					--rxcount;
+				}
+	
+				printf("Debug text: %s\n",debugtxt);
+				DebugRow(debugrow,debugtxt);
+				printf("tx %d, rx %d\n",txcount,rxcount);
+				if(!txcount && !rxcount)
+				{
+					int next=*ptr++;
+					if(next&0x80)
+					{
+						rxcount=next&0x7f;
+						printf("Receiving %x bytes",rxcount);
+					}
+					else
+					{
+						txcount=next;
+						++debugrow;
+						debugptr=debugtxt;
+						memset(debugptr,0,32);
+						printf("Sending %x bytes",txcount);
+					}
+					if(!txcount && !rxcount)
+						timeouts=0;
+				}
+			}
+		}
+	}
+}
+#endif
 
 void cycle(int row);
 void toggle(int row)
@@ -292,11 +432,21 @@ int main(int argc,char **argv)
 	}
 
 	EnableInterrupts();
+	handlemouse(1);
 
 	while(1)
 	{
-		handlemouse();
+		handlemouse(0);
 		Menu_Run();
+
+#if 0
+		if((TestKey(KEY_ESC) && TestKey(KEY_LCTRL))
+		{
+			DebugMouse();
+		}
+#endif
+
+		c64keys_inthandler();
 
 #ifdef CONFIG_DISKIMG
 		diskimg_poll();

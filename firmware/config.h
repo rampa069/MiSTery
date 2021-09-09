@@ -30,5 +30,10 @@ here, the number of units defaults to 4. */
    a PS/2 keyboard directly then that's probably a better option. */
 #undef CONFIG_SENDKEYS
 
+/* Send joystick events using the "new" extended joystick protocol.
+   This could support more buttons (if DeMiSTify itself supported them,
+   which it currently doesn't) - but some cores still use the older protocol. */
+#define CONFIG_EXTJOYSTICK
+
 #endif
 

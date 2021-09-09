@@ -347,7 +347,7 @@ port map (
 	c64_joy3 => c64_joy3,
 	c64_joy4 => c64_joy4,
 	c64_keys => c64_keys,
-	c64_joykey_ena => '1',
+	c64_joykey_ena => '0',
 
 	joy1_out => joy1,
 	joy2_out => joy2,
@@ -474,6 +474,8 @@ port map (
 		joy4 => std_logic_vector(joy4),
 
 		buttons => (0=>menu_button_n,others=>'0'),
+
+		c64_keys => std_logic_vector(c64_keys),
 
 		-- UART
 		rxd => rs232_rxd,

@@ -162,7 +162,8 @@ always@(posedge clk_sys) begin
 
 				// put start bit on data line
 				ps2_kbd_data <= 1'b0;			// start bit is 0
-			end
+			end else
+				ps2_kbd_data <= 1'b1;			// Leave data high when idle
 		end else begin
 
 			// transmission of 8 data bits
