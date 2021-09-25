@@ -22,6 +22,7 @@
 #include "spi_sd.h"
 
 #include "c64keys.c"
+#include "acsi.c"
 
 #define MIST_SET_CONTROL 0x04
 
@@ -47,18 +48,24 @@ void sendstatus(int statusword)
 
 char *configstring="Atari ST;;"
 	"S0U,ST ,Floppy A:;"
-	"S1U,ST ,Floppy B:;"
-	"O67,Write protect,Off,A:,B:,Both;"
+	"P1,Storage;"
+	"P1S0U,ST ,Floppy A:;"
+	"P1S1U,ST ,Floppy B:;"
+	"P1O67,Write protect,Off,A:,B:,Both;"
 //	"O45,CPU,68000,68020;"
-	"F,IMGROM,Load ROM;"
-	"P1,ST Configuration;"
-	"P1O13,RAM (need Hard Reset),512K,1MB,2MB,4MB,8MB,14MB;"
-	"P1O8,Video mode,Mono,Colour;"
-	"P1ONO,Chipset,ST,STE,MegaSTE;"
-	"P1OJ,ST Blitter,Off,On;"
-	"P1OM,Stereo sound,Off,On;"
-	"P1OKL,Scanlines,Off,25%,50%,75%;"
-	"P1OT,Composite blend,Off,On;"
+	"P1OAB,Hard disks,None,Unit 0,Unit 1,Both;"
+	"P1S2U,HDFVHD,Hardfile 0;"
+	"P1S3U,HDFVHD,Hardfile 1;"
+	"P2,ST Configuration;"
+	"P2O13,RAM (need Hard Reset),512K,1MB,2MB,4MB,8MB,14MB;"
+	"P2F,IMGROM,Load ROM;"
+	"P2O8,Video mode,Mono,Colour;"
+	"P2ONO,Chipset,ST,STE,MegaSTE;"
+	"P2OJ,ST Blitter,Off,On;"
+	"P3,Sound & Video;"
+	"P3OKL,Scanlines,Off,25%,50%,75%;"
+	"P3OT,Composite blend,Off,On;"
+	"P3OM,Stereo sound,Off,On;"
 	"T0,Reset (Hold for hard reset);"
 	"V,v3.40.";
 static char *cfgptr;
@@ -161,7 +168,7 @@ char *autoboot()
 {
 	char *result=0;
 	int s;
-	coretype=0;//DIRECTUPLOAD;
+	coretype=0; //DIRECTUPLOAD;
 	romtype=1;
 	configstring_index=0;
 	sendstatus(1);
@@ -219,7 +226,7 @@ void handlemouse(int reset)
 		idx=0;
 
 	if(!CheckTimer(delay))
-		return(0);
+		return;
 	delay=GetTimer(20);
 
 	if(!idx)
@@ -390,8 +397,11 @@ void toggle_wp(int unit)
 
 void loadimage(char *filename,int unit)
 {
+	int u=unit-'0';
+
 	switch(unit)
 	{
+		/* ROM images */
 		case 0:
 			if(filename)
 			{
@@ -400,12 +410,19 @@ void loadimage(char *filename,int unit)
 				LoadROM(filename);
 			}
 			break;
+		/* Floppy images */
 		case '0':
 		case '1':
-			diskimg_mount(0,unit-'0');				
-			toggle_wp(unit-'0');
-			diskimg_mount(filename,unit-'0');				
+			diskimg_mount(0,u);				
+			toggle_wp(u);
+			diskimg_mount(filename,u);				
 			break;
+		/* Hard disk images */
+		case '2':
+		case '3':
+			diskimg_mount(filename,u);
+			if(diskimg[u].valid)
+				statusword|=(TOS_ACSI0_ENABLE<<(u-2));
 	}
 	sendstatus(statusword);
 }
@@ -429,6 +446,7 @@ int main(int argc,char **argv)
 
 	if(err=autoboot())
 	{
+		// FIXME - complain about missing ROM here
 	}
 
 	EnableInterrupts();
@@ -450,6 +468,7 @@ int main(int argc,char **argv)
 
 #ifdef CONFIG_DISKIMG
 		diskimg_poll();
+		mist_get_dmastate();
 #endif
 	}
 
