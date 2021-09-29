@@ -3,8 +3,10 @@
 #include "interrupts.h"
 #include "c64keys.h"
 #include "keyboard.h"
+#include "ps2.h"
 #include "user_io.h"
 #include "spi.h"
+#include "menu.h"
 
 #define QUAL_SPECIAL 0x8000	/* Key emits a different keycode if shift is held */
 #define QUAL_LAYERKEY 0x4000 /* This key causes layers to switch */
@@ -134,13 +136,30 @@ static void c64_rb_write(struct c64keyboard *r,int in)
 
 void c64keyboard_write(struct c64keyboard *r,int in)
 {
+	int mv=Menu_Visible();
 	if((in&0xff)!=KEY_MENUKEY)
 	{
+		/* We disable interrupts here since we're adding key events both
+		   to the guest core's outgoing SPI buffer and to the controller's incoming
+		   PS/2 buffer */
+		DisableInterrupts();
 		if(in&0x80)
-			c64_rb_write(r,0xe0);
+		{
+			if(!mv)
+				c64_rb_write(r,0xe0);
+			PS2KeyboardReceive(0xe0);
+		}
 		if(in&0x100)
-			c64_rb_write(r,0xf0);
-		c64_rb_write(r,in&0x7f);
+		{
+			if(!mv)
+				c64_rb_write(r,0xf0);
+			PS2KeyboardReceive(0xf0);
+		}
+		if(!mv)
+			c64_rb_write(r,in&0x7f);
+		PS2KeyboardReceive(in&0x7f);
+		
+		EnableInterrupts();
 //		putchar('\n');
 #if 0
 		EnableIO();
@@ -158,7 +177,7 @@ void c64keyboard_write(struct c64keyboard *r,int in)
 }
 
 
-void c64keys_inthandler()
+void handlec64keys()
 {
 	int i;
 	static int time=0;

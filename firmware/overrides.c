@@ -26,11 +26,28 @@
 
 #define MIST_SET_CONTROL 0x04
 
+
+struct mistery_config
+{
+	char version;
+	char scandouble;
+	char pad[2];
+	int status;
+	uint32_t romdir;
+	uint32_t hdddir[2];
+	char romname[12]; /* Must be null-terminated */
+	char hddname[2][12]; /* Must be null-terminated */
+};
+
+struct mistery_config configfile_data;
+
+
 extern unsigned int statusword; /* So we can toggle the write-protect bits and provoke diskchanges. */
 
 /* Override this since the status is sent to dataio, not userio */
 void sendstatus(int statusword)
 {
+	configfile_data.status=statusword;
 	SPI(0xff);
 	SPI_ENABLE(HW_SPI_FPGA);
 	SPI(MIST_SET_CONTROL); // Read conf string command
@@ -56,16 +73,20 @@ char *configstring="Atari ST;;"
 	"P1OAB,Hard disks,None,Unit 0,Unit 1,Both;"
 	"P1S2U,HDFVHD,Hardfile 0;"
 	"P1S3U,HDFVHD,Hardfile 1;"
-	"P2,ST Configuration;"
+	"P2,System;"
+	"P2ONO,Chipset,ST,STE,MegaSTE,STEroids;"
+	"P2OJ,ST Blitter,Off,On;"
 	"P2O13,RAM (need Hard Reset),512K,1MB,2MB,4MB,8MB,14MB;"
 	"P2F,IMGROM,Load ROM;"
-	"P2O8,Video mode,Mono,Colour;"
-	"P2ONO,Chipset,ST,STE,MegaSTE;"
-	"P2OJ,ST Blitter,Off,On;"
+	"P2F,BINSTC,Load Cartridge;"
 	"P3,Sound & Video;"
+	"P3O8,Video mode,Mono,Colour;"
+	"P3OS,Viking/SM194,Off,On;"
 	"P3OKL,Scanlines,Off,25%,50%,75%;"
 	"P3OT,Composite blend,Off,On;"
 	"P3OM,Stereo sound,Off,On;"
+	"SC,CFG,Load config;"
+	"SD,CFG,Save config;"
 	"T0,Reset (Hold for hard reset);"
 	"V,v3.40.";
 static char *cfgptr;
@@ -112,22 +133,21 @@ unsigned char joy_keymap[]=
 
 /* Initial ROM */
 int LoadROM(const char *fn);
-const char *bootrom_name="TOS     IMG";
 extern unsigned char coretype;
 extern unsigned char romtype;
 extern fileTYPE file;
 
-void clearram(int size)
+void clearram(int size,int idx)
 {
 	int i;
 	SPI_ENABLE(HW_SPI_FPGA);
 	SPI(SPI_FPGA_FILE_INDEX);
-	SPI(0x3); /* Memory clear */
+	SPI(idx); /* Memory clear */
 	SPI_DISABLE(HW_SPI_FPGA);
 
 	SPI_ENABLE(HW_SPI_FPGA);
 	SPI(SPI_FPGA_FILE_TX);
-	SPI(0x01); /* Upload */
+	SPI(0x1); /* Upload */
 	SPI_DISABLE(HW_SPI_FPGA);
 
 	SPI_ENABLE_FAST_INT(HW_SPI_FPGA);
@@ -145,7 +165,7 @@ void clearram(int size)
 
 void setromtype(const char *filename)
 {
-	if(FileOpen(&file,filename))
+	if(romtype<2 && FileOpen(&file,filename))
 	{
 		switch(file.size>>10)
 		{
@@ -164,44 +184,7 @@ void setromtype(const char *filename)
 }
 
 
-char *autoboot()
-{
-	char *result=0;
-	int s;
-	coretype=0; //DIRECTUPLOAD;
-	romtype=1;
-	configstring_index=0;
-	sendstatus(1);
-	clearram(16384);
-	setromtype(bootrom_name);
-	LoadROM(bootrom_name);
-
-	sendstatus(0);
-	s=GetTimer(400);
-	while(!CheckTimer(s))
-		;
-	sendstatus(1);
-	s=GetTimer(100);
-	while(!CheckTimer(s))
-		;
-	sendstatus(0);
-	return(result);
-}
-
 void buildmenu(int offset);
-#if 0
-unsigned char mouseinit[]=
-{	
-	0xff,
-//	0xf4,0, // Uncomment this line to leave the mouse in 3-byte mode
-	0xf3,200,
-	0xf3,100,
-	0xf3,80,
-	0xf2,0x01,
-	0xf4,0
-};
-
-#endif
 
 unsigned char initmouse[]=
 {	
@@ -372,7 +355,7 @@ void toggle(int row)
 {
 	cycle(row);
 	if(menu_longpress)
-		clearram(16384);
+		clearram(16384,3);
 	cycle(row);
 }
 
@@ -386,7 +369,7 @@ void toggle_wp(int unit)
 		s^=1<<STATUS_WP_UNIT1;
 	else
 		s^=1<<STATUS_WP_UNIT0;
-//	printf("Sending alt status %x\n",s);
+
 	sendstatus(s);
 
 	s=GetTimer(500);
@@ -394,39 +377,203 @@ void toggle_wp(int unit)
 		;
 }
 
+int loadimage(const char *filename,int unit);
 
-void loadimage(char *filename,int unit)
+int loadconfig(const char *filename)
 {
+	int result=0;
+	char *err=0;
+	uint32_t currentdir=CurrentDirectory();
+	if(!filename)
+		return(result);
+
+	romtype=1;
+
+	if(FileOpen(&file,filename))
+	{
+		struct mistery_config *dat=(struct mistery_config *)sector_buffer;
+		sendstatus(statusword|1); /* Put the core in reset */
+		FileReadSector(&file,sector_buffer);
+
+		/* Load the config file to sector_buffer */
+
+		if(dat->version==1)
+		{
+//			printf("config version OK\n");
+			statusword=dat->status|1; /* Core will be in reset when status is next written */
+			scandouble=dat->scandouble;
+
+			if(ValidateDirectory(dat->romdir))
+			{
+				ChangeDirectoryByCluster(dat->romdir);
+				result=loadimage(dat->romname,0);
+			}
+			else
+				printf("ROM directory failed validation\n");
+
+			/* Loading the ROM file will have overwritten the config, so reload it */
+			ChangeDirectoryByCluster(currentdir);
+			FileOpen(&file,filename);
+			FileReadSector(&file,sector_buffer);
+
+			if(ValidateDirectory(dat->hdddir[0]))
+			{
+				ChangeDirectoryByCluster(dat->hdddir[0]);
+				loadimage(dat->hddname[0],'2');
+			}
+			else
+				printf("HDDDir[0] bad\n");
+
+			/* Reload the config again */
+
+			ChangeDirectoryByCluster(currentdir);
+			FileOpen(&file,filename);
+			FileReadSector(&file,sector_buffer);
+
+			if(ValidateDirectory(dat->hdddir[1]))
+			{
+				ChangeDirectoryByCluster(dat->hdddir[1]);
+				loadimage(dat->hddname[1],'3');
+			}
+			else
+				printf("HDDDir[1] bad\n");
+		}
+	}
+//	else
+//		err="Can't open file";
+	if(err)
+	{
+// FIXME - error handling.
+//		menu[7].label=err;
+//		Menu_Draw(7);
+//		Menu_ShowHide(1);
+	}
+	clearram(16384,3);
+	statusword&=~1; /* Release reset */
+	sendstatus(statusword);
+	SetScandouble(scandouble);
+	return(result);
+}
+
+
+int saveconfig(const char *filename)
+{
+	putchar('\n');
+	if(FileOpen(&file,filename))
+	{
+		configfile_data.version=1;
+		configfile_data.scandouble=scandouble;
+		configfile_data.status=statusword;
+		/* Ensure null-termination of filenames */
+		configfile_data.romname[11]=0;
+		configfile_data.hddname[0][11]=0;
+		configfile_data.hddname[1][11]=0;
+		FileWriteSector(&file,(char *)&configfile_data);
+		return(1);
+	}
+	return(0);
+}
+
+
+int loadimage(const char *filename,int unit)
+{
+	int result=0;
 	int u=unit-'0';
 
 	switch(unit)
 	{
 		/* ROM images */
 		case 0:
-			if(filename)
+			clearram(16384,2); /* Clear cartridge memory */
+			if(filename && filename[0])
 			{
+				strncpy(configfile_data.romname,filename,11);
+				configfile_data.romname[11]=0;
+				configfile_data.romdir=CurrentDirectory();
 				sendstatus(statusword|1);
-				setromtype(filename);
-				LoadROM(filename);
+				setromtype(configfile_data.romname);
+				LoadROM(configfile_data.romname);
+				result=1;
 			}
 			break;
 		/* Floppy images */
 		case '0':
 		case '1':
-			diskimg_mount(0,u);				
+			diskimg_mount(0,u);
 			toggle_wp(u);
-			diskimg_mount(filename,u);				
+			diskimg_mount(filename,u);
+			result=diskimg[u].valid;
 			break;
 		/* Hard disk images */
 		case '2':
 		case '3':
-			diskimg_mount(filename,u);
+			diskimg[u].valid=0;
+			if(filename)
+			{
+				strncpy(configfile_data.hddname[u-2],filename,11);
+				configfile_data.hddname[u-2][11]=0;
+
+				if(FileOpen(&diskimg[u].file,configfile_data.hddname[u-2]))
+					diskimg[u].valid=1;
+			}
+			else
+				configfile_data.hddname[u-2][0]=0;
+			configfile_data.hdddir[u-2]=CurrentDirectory();
+
 			if(diskimg[u].valid)
 				statusword|=(TOS_ACSI0_ENABLE<<(u-2));
+			else
+				statusword&=~(TOS_ACSI0_ENABLE<<(u-2));
+			result=diskimg[u].valid;
+			break;
+		/* Configuration files */
+		case 'C': /* Load config */
+			result=loadconfig(filename);
+			break;
+		case 'D': /* Save config */
+			result=saveconfig(filename);
+			break;
 	}
 	sendstatus(statusword);
+	return(result);
 }
 
+
+const char *bootrom_name="TOS     IMG";
+const char *bootcfg_name="MISTERY CFG";
+
+char *autoboot()
+{
+	char *result=0;
+	int s;
+	statusword=0;
+
+	coretype=0;
+	romtype=1;
+	configstring_index=0;
+
+	sendstatus(1);
+	clearram(16384,3);
+	clearram(16384,2); /* Clear cartridge memory */
+
+	if(!loadconfig(bootcfg_name))
+	{
+		sendstatus(statusword|1);
+		setromtype(bootrom_name);
+		LoadROM(bootrom_name);
+		sendstatus(statusword&~1);
+		s=GetTimer(400);
+		while(!CheckTimer(s))
+			;
+		sendstatus(statusword|1);
+		s=GetTimer(100);
+		while(!CheckTimer(s))
+			;
+	}
+	sendstatus(statusword&~1);
+
+	return(result);
+}
 
 int main(int argc,char **argv)
 {
@@ -464,7 +611,7 @@ int main(int argc,char **argv)
 		}
 #endif
 
-		c64keys_inthandler();
+		handlec64keys();
 
 #ifdef CONFIG_DISKIMG
 		diskimg_poll();

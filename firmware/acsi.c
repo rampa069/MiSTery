@@ -298,11 +298,11 @@ void handle_acsi(unsigned char *buffer) {
 				memset(sector_buffer, 0, 512);
 				sector_buffer[2] = 2;																	 // SCSI-2
 				sector_buffer[4] = length-5;														// len
-				memcpy(sector_buffer+8,	"DeMiSTify ", 8);								// Vendor
-				memcpy(sector_buffer+16, "								", 16);			 // Clear device entry
-				memcpy(sector_buffer+16, "HARDFILE IMAGE 0", 16);
+				memcpy(sector_buffer+8,	"TC64    ", 8);								// Vendor
+				memcpy(sector_buffer+16, "DeMiSTify HDD 0 ",16);
+				sector_buffer[30]='0'+target;
 				memcpy(sector_buffer+32, "832 ", 4);										// Product revision
-				memcpy(sector_buffer+36, "20120924	", 8);								// Serial number
+				memcpy(sector_buffer+36, "20120929	", 8);								// Serial number
 				if(device != 0) sector_buffer[0] = 0x7f;
 				mist_memory_write(sector_buffer, length/2);
 				dma_ack(0x00);
