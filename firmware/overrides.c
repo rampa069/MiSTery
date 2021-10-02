@@ -230,7 +230,11 @@ void handlemouse(int reset)
 				--rxcount;
 			}
 			else if(CheckTimer(timeout))
+			{
+				/* Clear the mouse buffer on timeout, to avoid blocking if no mouse if connected */
+				ps2_ringbuffer_init(&mousebuffer);
 				idx=0;
+			}
 	
 			if(!txcount && !rxcount)
 			{
@@ -448,7 +452,8 @@ int loadconfig(const char *filename)
 //		Menu_Draw(7);
 //		Menu_ShowHide(1);
 	}
-	clearram(16384,3);
+	clearram(16384,2); /* Force hard reset */
+	clearram(16384,3); /* Clear cartridge memory */
 	statusword&=~1; /* Release reset */
 	sendstatus(statusword);
 	SetScandouble(scandouble);
@@ -484,9 +489,9 @@ int loadimage(const char *filename,int unit)
 	{
 		/* ROM images */
 		case 0:
-			clearram(16384,2); /* Clear cartridge memory */
 			if(filename && filename[0])
 			{
+				clearram(16384,2); /* Clear cartridge memory */
 				strncpy(configfile_data.romname,filename,11);
 				configfile_data.romname[11]=0;
 				configfile_data.romdir=CurrentDirectory();
