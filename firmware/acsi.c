@@ -6,6 +6,8 @@
 
 #include "acsi.h"
 
+#undef ACSI_DEBUG
+
 #define disk_inserted(x) diskimg[x].valid
 
 #define DISKLED_ON
@@ -159,8 +161,10 @@ void handle_acsi(unsigned char *buffer) {
 	unsigned int length = buffer[4];
 	if(length == 0) length = 256;
 
-//	printf("ACSI: target %x.%x, cmd %s, (%x),", target, device, acsi_cmd_name(cmd), cmd);
-//	printf(" lba (%x), length %x\n", lba, length);
+#ifdef ACSI_DEBUG
+	printf("ACSI: target %x.%x, cmd %s, (%x),", target, device, acsi_cmd_name(cmd), cmd);
+	printf(" lba (%x), length %x\n", lba, length);
+#endif
 
 	// only a harddisk on ACSI 0/1 is supported
 	// ACSI 0/1 is only supported if a image is loaded
@@ -244,8 +248,10 @@ void handle_acsi(unsigned char *buffer) {
 						dma_ack(0x00);
 						asc[target] = 0x00;
 					} else {
+#ifdef ACSI_DEBUG
 						printf("ACSI: read (%x+%x) exceeds device limits (%x)", 
 							lba, length, blocks);
+#endif
 						dma_ack(0x02);
 						asc[target] = 0x21;
 					}
@@ -271,19 +277,21 @@ void handle_acsi(unsigned char *buffer) {
 					if(lba+length <= blocks) {
 						DISKLED_ON;
 						while(length) {
+							FileSeek(&diskimg[target+2].file, lba<<9);
 							mist_memory_read_block(sector_buffer);
-								FileSeek(&diskimg[target+2].file, lba<<9);
-								FileWriteSector(&diskimg[target+2].file, sector_buffer);
-								FileNextSector(&diskimg[target+2].file,1);
-								lba++;
+							FileWriteSector(&diskimg[target+2].file, sector_buffer);
+							FileNextSector(&diskimg[target+2].file,1);
+							lba++;
 							length--;
 						}
 						DISKLED_OFF;
 						dma_ack(0x00);
 						asc[target] = 0x00;
 					} else {
+#ifdef ACSI_DEBUG
 						printf("ACSI: write (%x+%x) exceeds device limits (%x)", 
 							lba, length, blocks);
+#endif
 						dma_ack(0x02);
 						asc[target] = 0x21;
 					}
@@ -294,7 +302,7 @@ void handle_acsi(unsigned char *buffer) {
 				break;
 
 			case 0x12: // inquiry
-			printf("ACSI: Inquiry target %d", target);
+//			printf("ACSI: Inquiry target %d", target);
 				memset(sector_buffer, 0, 512);
 				sector_buffer[2] = 2;																	 // SCSI-2
 				sector_buffer[4] = length-5;														// len
@@ -311,7 +319,7 @@ void handle_acsi(unsigned char *buffer) {
 
 			case 0x1a: // mode sense
 				if(device == 0) {
-					printf("ACSI: mode sense, blocks = 0x%x", blocks);
+//					printf("ACSI: mode sense, blocks = 0x%x", blocks);
 					memset(sector_buffer, 0, 512);
 					sector_buffer[3] = 8;						// size of extent descriptor list
 					sector_buffer[5] = blocks >> 16;
@@ -337,14 +345,15 @@ void handle_acsi(unsigned char *buffer) {
 	#endif
 
 			default:
-				printf("ACSI: >>>>>>>>>>>> Unsupported command <<<<<<<<<<<<<<<<");
+//				printf("ACSI: >>>>>>>>>>>> Unsupported command <<<<<<<<<<<<<<<<");
 				asc[target] = 0x20;
 				dma_ack(0x02);
 				break;
 		}
 	} else {
+#ifdef ACSI_DEBUG
 		printf("ACSI: Request for unsupported target");
-
+#endif
 		// tell acsi state machine that io controller is done 
 		// but don't generate a acsi irq
 		dma_nak();

@@ -21,6 +21,8 @@
 #include "diskimg.h"
 #include "spi_sd.h"
 
+#undef DEBUG
+
 #include "c64keys.c"
 #include "acsi.c"
 
@@ -405,6 +407,7 @@ int loadconfig(const char *filename)
 		{
 //			printf("config version OK\n");
 			statusword=dat->status|1; /* Core will be in reset when status is next written */
+			statusword&=~(TOS_ACSI0_ENABLE|TOS_ACSI1_ENABLE); /* Disable hard drives, will be re-enabled if HDF opens successfully. */
 			scandouble=dat->scandouble;
 
 			if(ValidateDirectory(dat->romdir))
@@ -412,8 +415,10 @@ int loadconfig(const char *filename)
 				ChangeDirectoryByCluster(dat->romdir);
 				result=loadimage(dat->romname,0);
 			}
+#ifdef DEBUG
 			else
 				printf("ROM directory failed validation\n");
+#endif
 
 			/* Loading the ROM file will have overwritten the config, so reload it */
 			ChangeDirectoryByCluster(currentdir);
@@ -425,8 +430,10 @@ int loadconfig(const char *filename)
 				ChangeDirectoryByCluster(dat->hdddir[0]);
 				loadimage(dat->hddname[0],'2');
 			}
+#ifdef DEBUG
 			else
 				printf("HDDDir[0] bad\n");
+#endif
 
 			/* Reload the config again */
 
@@ -439,8 +446,10 @@ int loadconfig(const char *filename)
 				ChangeDirectoryByCluster(dat->hdddir[1]);
 				loadimage(dat->hddname[1],'3');
 			}
+#ifdef DEBUG
 			else
 				printf("HDDDir[1] bad\n");
+#endif
 		}
 	}
 //	else
@@ -513,7 +522,7 @@ int loadimage(const char *filename,int unit)
 		case '2':
 		case '3':
 			diskimg[u].valid=0;
-			if(filename)
+			if(filename)// && filename[0])
 			{
 				strncpy(configfile_data.hddname[u-2],filename,11);
 				configfile_data.hddname[u-2][11]=0;
