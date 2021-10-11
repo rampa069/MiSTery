@@ -397,9 +397,13 @@ int loadconfig(const char *filename)
 
 	if(FileOpen(&file,filename))
 	{
+		int hdddir[2]; /* Cache these to avoid multiple reloads of the conig */
 		struct mistery_config *dat=(struct mistery_config *)sector_buffer;
 		sendstatus(statusword|1); /* Put the core in reset */
 		FileReadSector(&file,sector_buffer);
+
+		hdddir[0]=dat->hdddir[0];
+		hdddir[1]=dat->hdddir[1];
 
 		/* Load the config file to sector_buffer */
 
@@ -412,6 +416,7 @@ int loadconfig(const char *filename)
 
 			if(ValidateDirectory(dat->romdir))
 			{
+				FileReadSector(&file,sector_buffer);
 				ChangeDirectoryByCluster(dat->romdir);
 				result=loadimage(dat->romname,0);
 			}
@@ -423,10 +428,10 @@ int loadconfig(const char *filename)
 			/* Loading the ROM file will have overwritten the config, so reload it */
 			ChangeDirectoryByCluster(currentdir);
 			FileOpen(&file,filename);
-			FileReadSector(&file,sector_buffer);
 
-			if(ValidateDirectory(dat->hdddir[0]))
+			if(ValidateDirectory(hdddir[0]))
 			{
+				FileReadSector(&file,sector_buffer);
 				ChangeDirectoryByCluster(dat->hdddir[0]);
 				loadimage(dat->hddname[0],'2');
 			}
@@ -439,10 +444,10 @@ int loadconfig(const char *filename)
 
 			ChangeDirectoryByCluster(currentdir);
 			FileOpen(&file,filename);
-			FileReadSector(&file,sector_buffer);
 
-			if(ValidateDirectory(dat->hdddir[1]))
+			if(ValidateDirectory(hdddir[1]))
 			{
+				FileReadSector(&file,sector_buffer);
 				ChangeDirectoryByCluster(dat->hdddir[1]);
 				loadimage(dat->hddname[1],'3');
 			}
