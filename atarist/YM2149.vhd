@@ -54,6 +54,12 @@
 -- NOTE, when MIXER_VOLTABLE = '0', this component uses LINEAR mixing of the three analogue channels, 
 -- and is only accurate for designs where the outputs are buffered and not simply wired together.
 -- The ouput level is more complex in that case and requires a larger table (MIXER_VOLTABLE = '1').
+--
+-- AMR - 2021-10-24 - In stereo mode the measurements in the mixing table are no longer valid
+-- because the hardware arrangement being modelled no longer has the three YM outputs ganged together.
+-- Furthermore, the simple approach to stereo used here resulted in the centre channel being
+-- twice the volume of the other two.
+-- For these reasons, in stereo mode we bypass the volume table.
 
 library ieee;
   use ieee.std_logic_1164.all;
@@ -81,7 +87,7 @@ entity YM2149 is
   I_STEREO            : in  std_logic := '0';
 
   -- separate channel output
-  O_AUDIO             : out std_logic_vector(7 downto 0);
+  O_AUDIO             : out std_logic_vector(8 downto 0);
   O_CHAN              : out std_logic_vector(1 downto 0);
 
   -- mixed output
@@ -141,7 +147,7 @@ architecture RTL of YM2149 is
   signal noise_ena_l          : std_logic;
   signal chan_vol             : std_logic_vector(4 downto 0);
 
-  signal dac_amp              : std_logic_vector(7 downto 0);
+  signal dac_amp              : std_logic_vector(8 downto 0);
 
   signal vol_l                : std_logic_vector(9 downto 0);
   signal vol_r                : std_logic_vector(9 downto 0);
@@ -506,40 +512,40 @@ begin
         end if;
       end if;
 
-      dac_amp <= x"00";
+      dac_amp <= '0'&x"00";
       case chan_amp is
-        when "11111" => dac_amp <= x"FF";
-        when "11110" => dac_amp <= x"D9";
-        when "11101" => dac_amp <= x"BA";
-        when "11100" => dac_amp <= x"9F";
-        when "11011" => dac_amp <= x"88";
-        when "11010" => dac_amp <= x"74";
-        when "11001" => dac_amp <= x"63";
-        when "11000" => dac_amp <= x"54";
-        when "10111" => dac_amp <= x"48";
-        when "10110" => dac_amp <= x"3D";
-        when "10101" => dac_amp <= x"34";
-        when "10100" => dac_amp <= x"2C";
-        when "10011" => dac_amp <= x"25";
-        when "10010" => dac_amp <= x"1F";
-        when "10001" => dac_amp <= x"1A";
-        when "10000" => dac_amp <= x"16";
-        when "01111" => dac_amp <= x"13";
-        when "01110" => dac_amp <= x"10";
-        when "01101" => dac_amp <= x"0D";
-        when "01100" => dac_amp <= x"0B";
-        when "01011" => dac_amp <= x"09";
-        when "01010" => dac_amp <= x"08";
-        when "01001" => dac_amp <= x"07";
-        when "01000" => dac_amp <= x"06";
-        when "00111" => dac_amp <= x"05";
-        when "00110" => dac_amp <= x"04";
-        when "00101" => dac_amp <= x"03";
-        when "00100" => dac_amp <= x"03";
-        when "00011" => dac_amp <= x"02";
-        when "00010" => dac_amp <= x"02";
-        when "00001" => dac_amp <= x"01";
-        when "00000" => dac_amp <= x"00";
+        when "11111" => dac_amp <= '1'&x"FF"; -- ff";
+        when "11110" => dac_amp <= '1'&x"45"; -- D9";
+        when "11101" => dac_amp <= '1'&x"17"; -- BA";
+        when "11100" => dac_amp <= '0'&x"ee"; -- 9F";
+        when "11011" => dac_amp <= '0'&x"cc"; -- 88";
+        when "11010" => dac_amp <= '0'&x"ae"; -- 74";
+        when "11001" => dac_amp <= '0'&x"94"; -- 63";
+        when "11000" => dac_amp <= '0'&x"7e"; -- 54";
+        when "10111" => dac_amp <= '0'&x"6c"; -- 48";
+        when "10110" => dac_amp <= '0'&x"5b"; -- 3D";
+        when "10101" => dac_amp <= '0'&x"4e"; -- 34";
+        when "10100" => dac_amp <= '0'&x"42"; -- 2C";
+        when "10011" => dac_amp <= '0'&x"37"; -- 25";
+        when "10010" => dac_amp <= '0'&x"2e"; -- 1F";
+        when "10001" => dac_amp <= '0'&x"27"; -- 1A";
+        when "10000" => dac_amp <= '0'&x"21"; -- 16";
+        when "01111" => dac_amp <= '0'&x"1c"; -- 13";
+        when "01110" => dac_amp <= '0'&x"18"; -- 10";
+        when "01101" => dac_amp <= '0'&x"13"; -- 0D";
+        when "01100" => dac_amp <= '0'&x"10"; -- 0B";
+        when "01011" => dac_amp <= '0'&x"0d"; -- 09";
+        when "01010" => dac_amp <= '0'&x"0c"; -- 08";
+        when "01001" => dac_amp <= '0'&x"0a"; -- 07";
+        when "01000" => dac_amp <= '0'&x"09"; -- 06";
+        when "00111" => dac_amp <= '0'&x"07"; -- 05";
+        when "00110" => dac_amp <= '0'&x"06"; -- 04";
+        when "00101" => dac_amp <= '0'&x"05"; -- 03";
+        when "00100" => dac_amp <= '0'&x"04"; -- 03";
+        when "00011" => dac_amp <= '0'&x"03"; -- 02";
+        when "00010" => dac_amp <= '0'&x"02"; -- 02";
+        when "00001" => dac_amp <= '0'&x"01";
+        when "00000" => dac_amp <= '0'&x"00";
         when others => null;
       end case;
 
@@ -555,7 +561,7 @@ begin
     elsif rising_edge(CLK) then
 
       if (ENA = '1') then
-        O_AUDIO <= dac_amp(7 downto 0);
+        O_AUDIO <= dac_amp(8 downto 0);
         O_CHAN  <= cnt_div_t1(1 downto 0);
       end if;
 
@@ -576,10 +582,11 @@ begin
       if (ENA = '1') then
         case cnt_div_t1(1 downto 0) is
         when "10" => -- Channel C
-          vol_r <= "00" & dac_amp;
           if I_STEREO = '0' then
-            vol_l <= "00" & dac_amp;
+				vol_r <= "0" & dac_amp;
+            vol_l <= "0" & dac_amp;
           else
+			   vol_r <= dac_amp & '0';
             vol_l <= (others => '0');
           end if;
         when "01" => -- Channel B
@@ -588,8 +595,10 @@ begin
         when "00" => -- Channel A
           if I_STEREO = '0' then
             vol_r <= vol_r + dac_amp;
+            vol_l <= vol_l + dac_amp;
+          else
+            vol_l <= vol_l + (dac_amp&'0');
           end if;
-          vol_l <= vol_l + dac_amp;
         when "11" =>
           vol_mixer_l <= vol_l;
           vol_mixer_r <= vol_r;
@@ -688,7 +697,7 @@ begin
       O_AUDIO_L <= (others => '0');
       O_AUDIO_R <= (others => '0');
     else
-      if (MIXER_VOLTABLE = '1') then
+      if (MIXER_VOLTABLE = '1' and I_STEREO = '0') then
         O_AUDIO_L <= vol_table_out_l;
         O_AUDIO_R <= vol_table_out_r;
       else
