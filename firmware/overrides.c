@@ -20,6 +20,7 @@
 #include "timer.h"
 #include "diskimg.h"
 #include "spi_sd.h"
+#include "user_io.h"
 
 #undef DEBUG
 
@@ -47,12 +48,12 @@ struct mistery_config configfile_data;
 extern unsigned int statusword; /* So we can toggle the write-protect bits and provoke diskchanges. */
 
 /* Override this since the status is sent to dataio, not userio */
-void sendstatus(int statusword)
+void sendstatus()
 {
 	configfile_data.status=statusword;
 	SPI(0xff);
 	SPI_ENABLE(HW_SPI_FPGA);
-	SPI(MIST_SET_CONTROL); // Read conf string command
+	SPI(MIST_SET_CONTROL);
 	SPI(statusword>>24);
 	SPI(statusword>>16);
 	SPI(statusword>>8);
@@ -135,7 +136,6 @@ unsigned char joy_keymap[]=
 
 /* Initial ROM */
 int LoadROM(const char *fn);
-extern unsigned char coretype;
 extern unsigned char romtype;
 extern fileTYPE file;
 
@@ -376,7 +376,7 @@ void toggle_wp(int unit)
 	else
 		s^=1<<STATUS_WP_UNIT0;
 
-	sendstatus(s);
+	sendstatus();
 
 	s=GetTimer(500);
 	while(!CheckTimer(s))
@@ -399,7 +399,8 @@ int loadconfig(const char *filename)
 	{
 		int hdddir[2]; /* Cache these to avoid multiple reloads of the conig */
 		struct mistery_config *dat=(struct mistery_config *)sector_buffer;
-		sendstatus(statusword|1); /* Put the core in reset */
+		statusword|=1;
+		sendstatus(); /* Put the core in reset */
 		FileReadSector(&file,sector_buffer);
 
 		hdddir[0]=dat->hdddir[0];
@@ -469,7 +470,7 @@ int loadconfig(const char *filename)
 	clearram(16384,2); /* Force hard reset */
 	clearram(16384,3); /* Clear cartridge memory */
 	statusword&=~1; /* Release reset */
-	sendstatus(statusword);
+	sendstatus();
 	SetScandouble(scandouble);
 	return(result);
 }
@@ -509,7 +510,8 @@ int loadimage(const char *filename,int unit)
 				strncpy(configfile_data.romname,filename,11);
 				configfile_data.romname[11]=0;
 				configfile_data.romdir=CurrentDirectory();
-				sendstatus(statusword|1);
+				statusword|=1;
+				sendstatus();
 				setromtype(configfile_data.romname);
 				LoadROM(configfile_data.romname);
 				result=1;
@@ -521,29 +523,27 @@ int loadimage(const char *filename,int unit)
 			diskimg_mount(0,u);
 			toggle_wp(u);
 			diskimg_mount(filename,u);
-			result=diskimg[u].valid;
+			result=diskimg[u].file.size;
 			break;
 		/* Hard disk images */
 		case '2':
 		case '3':
-			diskimg[u].valid=0;
+			diskimg[u].file.size=0;
 			if(filename)// && filename[0])
 			{
 				strncpy(configfile_data.hddname[u-2],filename,11);
 				configfile_data.hddname[u-2][11]=0;
-
-				if(FileOpen(&diskimg[u].file,configfile_data.hddname[u-2]))
-					diskimg[u].valid=1;
+				FileOpen(&diskimg[u].file,configfile_data.hddname[u-2]);
 			}
 			else
 				configfile_data.hddname[u-2][0]=0;
 			configfile_data.hdddir[u-2]=CurrentDirectory();
 
-			if(diskimg[u].valid)
+			if(diskimg[u].file.size)
 				statusword|=(TOS_ACSI0_ENABLE<<(u-2));
 			else
 				statusword&=~(TOS_ACSI0_ENABLE<<(u-2));
-			result=diskimg[u].valid;
+			result=diskimg[u].file.size;
 			break;
 		/* Configuration files */
 		case 'C': /* Load config */
@@ -553,7 +553,8 @@ int loadimage(const char *filename,int unit)
 			result=saveconfig(filename);
 			break;
 	}
-	sendstatus(statusword);
+	statusword&=~1;
+	sendstatus();
 	return(result);
 }
 
@@ -561,83 +562,77 @@ int loadimage(const char *filename,int unit)
 const char *bootrom_name="TOS     IMG";
 const char *bootcfg_name="MISTERY CFG";
 
+#if 0
+static void interrupthandler()
+{
+	handlec64keys();
+	PS2Handler();
+}
+#endif
+
 char *autoboot()
 {
 	char *result=0;
 	int s;
-	statusword=0;
+	statusword=1;
 
-	coretype=0;
 	romtype=1;
 	configstring_index=0;
 
-	sendstatus(1);
+	sendstatus();
 	clearram(16384,3);
 	clearram(16384,2); /* Clear cartridge memory */
 
 	if(!loadconfig(bootcfg_name))
 	{
-		sendstatus(statusword|1);
+		sendstatus();
 		setromtype(bootrom_name);
 		LoadROM(bootrom_name);
-		sendstatus(statusword&~1);
+		statusword&=~1;
+		sendstatus();
 		s=GetTimer(400);
 		while(!CheckTimer(s))
 			;
-		sendstatus(statusword|1);
+		statusword|=1;
+		sendstatus();
 		s=GetTimer(100);
 		while(!CheckTimer(s))
 			;
 	}
-	sendstatus(statusword&~1);
+	statusword&=~1;
+	sendstatus();
+
+	initc64keys();
+	/* Override the interrupt handler previously set in PS2Init() */
+/*	SetIntHandler(&interrupthandler); */
+
+	/* Initialise the PS/2 mouse */
+	EnableInterrupts();
+	handlemouse(1);
 
 	return(result);
 }
 
-int main(int argc,char **argv)
+
+char *get_rtc();
+
+int UpdateKeys(int blockkeys)
 {
-	int havesd;
-	int i,c;
-	int osd=0;
-	char *err;
+	handlec64keys();
+	return(HandlePS2RawCodes(blockkeys));
+}
 
-	PS2Init();
-
-	SPI(0xff);
-
-	if(havesd=sd_init() && FindDrive())
-		puts("OK");
-
-	buildmenu(0);
-
-	if(err=autoboot())
-	{
-		// FIXME - complain about missing ROM here
-	}
-
-	EnableInterrupts();
-	handlemouse(1);
-
+__weak void mainloop()
+{
+	int framecounter;
 	while(1)
 	{
 		handlemouse(0);
 		Menu_Run();
-
-#if 0
-		if((TestKey(KEY_ESC) && TestKey(KEY_LCTRL))
-		{
-			DebugMouse();
-		}
-#endif
-
-		handlec64keys();
-
-#ifdef CONFIG_DISKIMG
 		diskimg_poll();
 		mist_get_dmastate();
-#endif
+		if((framecounter++&8191)==0)
+			user_io_send_rtc(get_rtc());
 	}
-
-	return(0);
 }
 

@@ -434,7 +434,7 @@ port map (
 		sysclk_frequency => 500,
 		debug => false,
 		jtag_uart => false,
-		SPI_FASTBIT => 3,
+		SPI_FASTBIT => 2,
 		SPI_EXTERNALCLK => true
 	)
 	port map (

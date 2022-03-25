@@ -118,7 +118,7 @@ unsigned int c64keytable[]=
 	LAYER(KEY_NKPLUS,KEY_SLASH), /* $37	? */
 
 	KEY_1, /* $38	1 */
-	LAYER(KEY_MENUKEY,KEY_ESC), /* $39	← */
+	LAYER(KEY_F12,KEY_ESC), /* $39	← */
 	LAYER(KEY_TAB,QUAL_CTRL|KEY_LCTRL), /* $3A	Control */
 	KEY_2, /* $3B	2 */
 	KEY_SPACE, /* $3C	Space */
@@ -137,59 +137,32 @@ static void c64_rb_write(struct c64keyboard *r,int in)
 void c64keyboard_write(struct c64keyboard *r,int in)
 {
 	int mv=Menu_Visible();
-	if((in&0xff)!=KEY_MENUKEY)
+	DisableInterrupts();	
+	if(in&0x80)
 	{
-		/* We disable interrupts here since we're adding key events both
-		   to the guest core's outgoing SPI buffer and to the controller's incoming
-		   PS/2 buffer */
-		DisableInterrupts();
-		if(in&0x80)
-		{
-			if(!mv)
-				c64_rb_write(r,0xe0);
-			PS2KeyboardReceive(0xe0);
-		}
-		if(in&0x100)
-		{
-			if(!mv)
-				c64_rb_write(r,0xf0);
-			PS2KeyboardReceive(0xf0);
-		}
 		if(!mv)
-			c64_rb_write(r,in&0x7f);
-		PS2KeyboardReceive(in&0x7f);
-		
-		EnableInterrupts();
-//		putchar('\n');
-#if 0
-		EnableIO();
-		SPI(UIO_KEYBOARD);
-		if(in&0x80)
-			SPI(0xe0);
-		if(in&0x100)
-			SPI(0xf0);
-		SPI(in);
-		DisableIO();
-#endif
+			c64_rb_write(r,0xe0);
+		PS2KeyboardReceive(0xe0);
 	}
-	else if(in==KEY_MENUKEY)
-		Menu_ShowHide(-1);
+	if(in&0x100)
+	{
+		if(!mv)
+			c64_rb_write(r,0xf0);
+		PS2KeyboardReceive(0xf0);
+	}
+	if(!mv)
+		c64_rb_write(r,in&0x7f);
+	PS2KeyboardReceive(in&0x7f);
+	EnableInterrupts();	
 }
 
 
-void handlec64keys()
+/* Pull this into a separate function since it's not safe to do SPI transactions in an interrupt */
+
+void sendc64keys()
 {
-	int i;
-	static int time=0;
 	static int sendtime=0;
-	int count=0;
-	int idx=63;
-	int nextframe=(c64keys.frame+2)%6;
-	int prevframe=(c64keys.frame+4)%6;
-
-	unsigned int aa;
-	unsigned int ad;
-
+	DisableInterrupts();
 	if(CheckTimer(sendtime) && c64keys.out_hw!=c64keys.out_cpu)
 	{
 		char key=c64keys.outbuf[c64keys.out_hw];
@@ -200,6 +173,29 @@ void handlec64keys()
 		DisableIO();
 		c64keys.out_hw=(c64keys.out_hw+1) & (C64KEY_RINGBUFFER_SIZE-1);
 	}
+	EnableInterrupts();
+}
+
+/* We don't want to poll the keyboard too quickly or we'll undo the filtering required to detect joystick port interference. */
+#define FRAMETIME 0x20
+
+void handlec64keys()
+{
+	int i;
+	static int time=0;
+	int count=0;
+	int idx=63;
+	int nextframe=(c64keys.frame+2)%6;
+	int prevframe=(c64keys.frame+4)%6;
+
+	unsigned int aa;
+	unsigned int ad;
+
+	sendc64keys();
+
+	if(!CheckTimer(time))
+		return;
+	time=GetTimer(FRAMETIME);
 
 	for(i=0;i<2;++i)
 	{
@@ -342,7 +338,7 @@ void handlec64keys()
 	}
 }
 
-__constructor(101.c64keys) void c64keysconstructor()
+void initc64keys()
 {
 	int i;
 	for(i=0;i<6;++i)

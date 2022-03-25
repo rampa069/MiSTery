@@ -23,9 +23,8 @@ struct c64keyboard
 
 extern struct c64keyboard c64keys;
 
-void c64keyboard_init(struct c64keyboard *r);
-void c64keyboard_write(struct c64keyboard *r,int in);
-int c64keyboard_checkreset();
-void c64keys_inthandler();
+void handle64keys();
+void initc64keys();
+void sendc64keys();
 
 #endif

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "interrupts.h"
 #include "spi.h"
 #include "minfat.h"
 
@@ -8,7 +9,7 @@
 
 #undef ACSI_DEBUG
 
-#define disk_inserted(x) diskimg[x].valid
+#define disk_inserted(x) diskimg[x].file.size
 
 #define DISKLED_ON
 #define DISKLED_OFF
@@ -248,6 +249,7 @@ void handle_acsi(unsigned char *buffer) {
 						dma_ack(0x00);
 						asc[target] = 0x00;
 					} else {
+//						puts("ACSI: read beyond end of device");
 #ifdef ACSI_DEBUG
 						printf("ACSI: read (%x+%x) exceeds device limits (%x)", 
 							lba, length, blocks);
@@ -288,6 +290,7 @@ void handle_acsi(unsigned char *buffer) {
 						dma_ack(0x00);
 						asc[target] = 0x00;
 					} else {
+//						puts("ACSI: write beyond end of device");
 #ifdef ACSI_DEBUG
 						printf("ACSI: write (%x+%x) exceeds device limits (%x)", 
 							lba, length, blocks);
@@ -345,7 +348,7 @@ void handle_acsi(unsigned char *buffer) {
 	#endif
 
 			default:
-//				printf("ACSI: >>>>>>>>>>>> Unsupported command <<<<<<<<<<<<<<<<");
+//				puts("ACSI: Unsupported command");
 				asc[target] = 0x20;
 				dma_ack(0x02);
 				break;
@@ -354,6 +357,7 @@ void handle_acsi(unsigned char *buffer) {
 #ifdef ACSI_DEBUG
 		printf("ACSI: Request for unsupported target");
 #endif
+//		puts("ACSI: Unsupported target");
 		// tell acsi state machine that io controller is done 
 		// but don't generate a acsi irq
 		dma_nak();
@@ -366,6 +370,7 @@ void mist_get_dmastate() {
 	unsigned int dma_address;
 	unsigned char scnt;
 
+//	DisableInterrupts();
 	EnableFpga();
 	SPI(MIST_GET_DMASTATE);
 	spi_read(buffer, 16);
@@ -376,6 +381,7 @@ void mist_get_dmastate() {
 //		spi_newspeed = SPI_MMC_CLK_VALUE;
 		handle_acsi(buffer);
 	}
+//	EnableInterrupts();
 }
 
 
