@@ -143,7 +143,8 @@ wire steroids = system_ctrl[23] && system_ctrl[24];  // a STE on steroids
 
 // ethernec is enabled by the io controller whenever a USB 
 // ethernet interface is detected
-wire ethernec_present = system_ctrl[25];
+wire       ethernec_present = system_ctrl[25];
+wire       cubase_enable = system_ctrl[30];
 
 wire       psg_stereo = system_ctrl[22];
 
@@ -201,6 +202,7 @@ wire        n6850, fcs_n;
 wire        rtccs_n, rtcrd_n, rtcwr_n;
 wire        sint;
 wire [15:0] mcu_dout;
+wire        mcu_oe_l, mcu_oe_h;
 wire        ras_n = ras0_n & ras1_n;
 wire        button_n, joywe_n, joyrl_n, joywl, joyrh_n;
 
@@ -223,21 +225,22 @@ wire        cpu_reset_n_o;
 wire [15:0] cpu_din, cpu_dout;
 wire [23:1] cpu_a;
 
-wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
+wire        rom_n = rom0_n & rom1_n & rom2_n & ((rom3_n & rom4_n) | cubase_enable | eth_rd) & rom5_n & rom6_n & romp_n;
 assign      cpu_din = 
-              ~fcs_n ? dma_data_out :
-              blitter_sel ? blitter_data_out :
-              !rdat_n  ? shifter_dout :
-              !(mfpcs_n & mfpiack_n)? { 8'hff, mfp_data_out } :
-              (eth_rd | eth_wr) ? { eth_data_out, 8'h00 } :
-              !rom_n   ? rom_data_out :
-              n6850    ? { mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out, 8'hFF } :
-              sndcs    ? { snd_data_out, 8'hFF }:
-              mste_ctrl_sel ? {8'hff, mste_ctrl_data_out }:
-              !button_n ? { 12'hfff, ste_buttons } :
-              !(joyrh_n & joyrl_n) ? { joyrh_n ? 8'hff : ste_joy_in[15:8], joyrl_n ? 8'hff : ste_joy_in[7:0] } :
-              !rtccs_n ? { 12'hfff, rtc_data_out }:
-              mcu_dout;
+              ((~fcs_n & rw) ? dma_data_out : 16'hffff) &
+              (blitter_sel ? blitter_data_out : 16'hffff) &
+              (rdat_n ? 16'hffff : shifter_dout) &
+              {8'hff, (mfpcs_n & mfpiack_n) ? 8'hff : mfp_data_out} &
+              {(!rom3_n & cubase_enable) ? cubase_dout : 8'hff, 8'hff} &
+              {eth_rd ? eth_data_out : 8'hff, 8'hff} &
+              (rom_n ? 16'hffff : rom_data_out) &
+              {(n6850 & rw) ? (mbus_a[2] ? midi_acia_data_out : kbd_acia_data_out) : 8'hff, 8'hff} &
+              {snd_data_oe_l ? 8'hff : snd_data_out, 8'hff} &
+              {8'hff, (mste_ctrl_sel & rw) ? mste_ctrl_data_out : 8'hff} &
+              {12'hfff, button_n ? 4'hf : ste_buttons} &
+              {joyrh_n ? 8'hff : ste_joy_in[15:8], joyrl_n ? 8'hff : ste_joy_in[7:0]} &
+              {12'hfff, (rtccs_n & rw) ? 4'hf : rtc_data_out} &
+              {mcu_oe_h ? mcu_dout[15:8] : 8'hff, mcu_oe_l ? mcu_dout[7:0] : 8'hff};
 
 // Shifter signals
 wire        cmpcs_n, latch, de, rdat_n, wdat_n, dcyc_n, sreq, sload_n, mono;
@@ -289,6 +292,8 @@ gstmcu gstmcu (
 	// DIN - only interested in sources which can be bus masters (+shifter) - to avoid long combinatorial paths
 	.DIN        ( ~rdy_i ? dma_data_out : blitter_sel ? blitter_data_out : !rdat_n  ? shifter_dout : cpu_dout ),
 	.DOUT       ( mcu_dout ),
+	.OE_L       ( mcu_oe_l ),
+	.OE_H       ( mcu_oe_h ),
 	.CLK_O      ( clk16 ),
 	.MHZ8       ( mhz8 ),
 	.MHZ8_EN1   ( mhz8_en1 ),
@@ -713,6 +718,7 @@ acia midi_acia (
 /* ------------------------------------------------------------------------------ */
 
 wire [7:0] snd_data_out;
+wire       snd_data_oe_l;
 wire [7:0] ym_a_out, ym_b_out, ym_c_out;
 
 wire [9:0] ym_audio_out_l;
@@ -741,6 +747,7 @@ YM2149 #(.MIXER_VOLTABLE(1'b1)) ym2149 (
 	.RESET_L     ( ~peripheral_reset ),
 	.I_DA        ( mbus_dout[15:8]),
 	.O_DA        ( snd_data_out  ),
+	.O_DA_OE_L   ( snd_data_oe_l ),
 	.O_AUDIO_L   ( ym_audio_out_l),
 	.O_AUDIO_R   ( ym_audio_out_r),
 	.I_BDIR      ( sndir         ),
@@ -925,6 +932,8 @@ always @(*) begin
 		5'b1_????: rtc_data_out = rtc_bank1[mbus_a[4:1]];
 		default: rtc_data_out = 4'hf;
 	endcase
+	// make the RTC invisible if no valid RTC data arrives from the IO Controller
+	if (rtc == 0) rtc_data_out = 4'hf;
 end
 
 always @(posedge clk_32) begin
@@ -1067,6 +1076,42 @@ ethernec ethernec (
 	.rx_begin   (eth_rx_write_begin),
 	.rx_strobe  (eth_rx_write_strobe),
 	.rx_byte    (eth_rx_write_byte)
+);
+
+/* ------------------------------------------------------------------------------ */
+/* ------------------------------- Cubase dongle  ------------------------------- */
+/* ------------------------------------------------------------------------------ */
+wire        cubase3_d8;
+wire  [7:0] cubase2_dout;
+wire  [7:0] cubase_dout = cubase_sel ? cubase2_dout : {7'h7f, cubase3_d8};
+reg         cubase_sel; // Cubase3/2 dongle
+reg         cubase_lock;
+
+always @(posedge clk_32) begin
+	if (peripheral_reset) begin
+		cubase_sel <= 0;
+		cubase_lock <= 0;
+	end
+	else if (cubase_enable & !rom3_n & !cubase_lock) begin
+		cubase_sel <= |mbus_a[7:1];
+		cubase_lock <= 1;
+	end
+end
+
+cubase2_dongle cubase2_dongle (
+	.clk        ( clk_32           ),
+	.reset      ( peripheral_reset ),
+	.uds_n      ( uds_n            ),
+	.A          ( mbus_a[8:1]      ),
+	.D          ( cubase2_dout     )
+);
+
+cubase3_dongle cubase3_dongle (
+	.clk        ( clk_32           ),
+	.reset      ( peripheral_reset ),
+	.rom3_n     ( rom3_n           ),
+	.a8         ( mbus_a[8]        ),
+	.d8         ( cubase3_d8       )
 );
 
 /* ------------------------------------------------------------------------------ */
