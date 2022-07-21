@@ -82,6 +82,7 @@ char *configstring="Atari ST;;"
 	"P2O13,RAM (need Hard Reset),512K,1MB,2MB,4MB,8MB,14MB;"
 	"P2F,IMGROM,Load ROM;"
 	"P2F,BINSTC,Load Cartridge;"
+	"P2OU,Cubase Dongle,Off,On;"
 	"P3,Sound & Video;"
 	"P3O8,Video mode,Mono,Colour;"
 	"P3OS,Viking/SM194,Off,On;"
@@ -155,7 +156,7 @@ void clearram(int size,int idx)
 	SPI_ENABLE_FAST_INT(HW_SPI_FPGA);
 	SPI(SPI_FPGA_FILE_TX_DAT);
 	for(i=0;i<size;++i)
-		SPI(0x00);
+		SPI(0xff); /* Send 0xff instead of 0x00 */
 	SPI_DISABLE(HW_SPI_FPGA);
 
 	SPI_ENABLE(HW_SPI_FPGA);
@@ -467,6 +468,8 @@ int loadconfig(const char *filename)
 //		Menu_Draw(7);
 //		Menu_ShowHide(1);
 	}
+	statusword|=1; /* Re-assert reset */
+	sendstatus();
 	clearram(16384,2); /* Force hard reset */
 	clearram(16384,3); /* Clear cartridge memory */
 	statusword&=~1; /* Release reset */
@@ -579,10 +582,6 @@ char *autoboot()
 	romtype=1;
 	configstring_index=0;
 
-	sendstatus();
-	clearram(16384,3);
-	clearram(16384,2); /* Clear cartridge memory */
-
 	if(!loadconfig(bootcfg_name))
 	{
 		sendstatus();
@@ -599,6 +598,11 @@ char *autoboot()
 		while(!CheckTimer(s))
 			;
 	}
+	statusword|=1;
+	sendstatus();
+	sendstatus();
+	clearram(16384,3);
+	clearram(16384,2); /* Clear cartridge memory */
 	statusword&=~1;
 	sendstatus();
 

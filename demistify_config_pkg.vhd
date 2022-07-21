@@ -33,7 +33,7 @@ constant demistify_serialdebug : std_logic := '0';
 COMPONENT mistery_top
 	PORT
 	(
-		CLOCK_27 :	IN STD_LOGIC_VECTOR(1 downto 0);
+		CLOCK_27 :	IN STD_LOGIC;
 --		RESET_N :   IN std_logic;
 		LED	: out STD_LOGIC;
 		SDRAM_DQ		:	 INOUT STD_LOGIC_VECTOR(15 DOWNTO 0);

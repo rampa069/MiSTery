@@ -450,7 +450,7 @@ port map (
 	guest: COMPONENT mistery_top
 	PORT map
 	(
-		CLOCK_27 => clk50m&clk50m,
+		CLOCK_27 => clk50m,
 --		RESET_N => reset_n,
 		LED=>act_led,
 		-- clocks

@@ -190,6 +190,8 @@ always @(posedge clk) begin
 	end
 end
 
+wire tg68_clr_berr = 1'b0;
+
 TG68KdotC_Kernel #(2,2,2,2,2,2,1,1) tg68k (
 	.clk            ( clk           ),
 	.nReset         ( ~reset        ),

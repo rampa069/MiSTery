@@ -370,7 +370,7 @@ port map (
 	guest: COMPONENT mistery_top
 	PORT map
 	(
-			CLOCK_27 => clk8&clk8,
+			CLOCK_27 => clk8,
 --			RESET_N => reset_n,
 			-- clocks
 

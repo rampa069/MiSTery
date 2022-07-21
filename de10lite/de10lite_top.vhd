@@ -188,7 +188,7 @@ joyd<=(others=>'1');
 guest: COMPONENT mistery_top
 	PORT map
 	(
-		CLOCK_27 => '0'&MAX10_CLK2_50,
+		CLOCK_27 => MAX10_CLK2_50,
 --		RESET_N => reset_n,
 		LED => act_led,
 		-- clocks
