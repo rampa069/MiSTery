@@ -163,7 +163,7 @@ sigma_delta_dac sigma_delta_dac (
 );
 
 /* ------------------------------------------------------------------------------ */
-/* ------------------------------- MIDO output FIFO ----------------------------- */
+/* ------------------------------- MIDI output FIFO ----------------------------- */
 /* ------------------------------------------------------------------------------ */
 // filled by the CPU when writing to the acia data register
 // emptied by the io controller when reading via SPI

@@ -470,8 +470,8 @@ int loadconfig(const char *filename)
 	}
 	statusword|=1; /* Re-assert reset */
 	sendstatus();
-	clearram(16384,2); /* Force hard reset */
-	clearram(16384,3); /* Clear cartridge memory */
+	clearram(16384,2); /* Clear cartridge memory */
+	clearram(16384,3); /* Force hard reset */
 	statusword&=~1; /* Release reset */
 	sendstatus();
 	SetScandouble(scandouble);
@@ -509,15 +509,15 @@ int loadimage(const char *filename,int unit)
 		case 0:
 			if(filename && filename[0])
 			{
+				statusword|=1;
+				sendstatus();
 				clearram(16384,2); /* Clear cartridge memory */
+				clearram(16384,3); /* Force hard reset */
 				strncpy(configfile_data.romname,filename,11);
 				configfile_data.romname[11]=0;
 				configfile_data.romdir=CurrentDirectory();
-				statusword|=1;
-				sendstatus();
 				setromtype(configfile_data.romname);
-				LoadROM(configfile_data.romname);
-				result=1;
+				result=LoadROM(configfile_data.romname);
 			}
 			break;
 		/* Floppy images */
@@ -577,6 +577,7 @@ char *autoboot()
 {
 	char *result=0;
 	int s;
+	int t;
 	statusword=1;
 
 	romtype=1;
@@ -586,23 +587,9 @@ char *autoboot()
 	{
 		sendstatus();
 		setromtype(bootrom_name);
-		LoadROM(bootrom_name);
-		statusword&=~1;
-		sendstatus();
-		s=GetTimer(400);
-		while(!CheckTimer(s))
-			;
-		statusword|=1;
-		sendstatus();
-		s=GetTimer(100);
-		while(!CheckTimer(s))
-			;
+		if(!loadimage(bootrom_name,0))
+			result="ROM loading failed.";
 	}
-	statusword|=1;
-	sendstatus();
-	sendstatus();
-	clearram(16384,3);
-	clearram(16384,2); /* Clear cartridge memory */
 	statusword&=~1;
 	sendstatus();
 

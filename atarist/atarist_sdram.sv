@@ -1130,15 +1130,21 @@ wire ram_we = ~ram_we_n;
 
 // TOS/cartridge upload via data_io
 reg tos192k = 1'b0;
-
+reg ddown_d;
+reg [31:0] checksum /* synthesis noprune */;
 always @(posedge clk_32) begin
 	reg data_in_strobe_romD;
-
+	ddown_d <= data_download;
+	
+	if(data_download && !ddown_d)
+		checksum <= 32'b0;
+	
 	ras_n_d <= ras_n;
 	data_wr <= 1'b0;
 	if (cpu_precycle && mhz8_en1) begin
 		data_in_strobe_romD <= data_in_strobe_rom;
 		if (data_in_strobe_rom ^ data_in_strobe_romD) data_wr <= 1'b1;
+		if (data_in_strobe_rom ^ data_in_strobe_romD) checksum<=checksum + data_in_reg;
 	end
 	if (data_download) begin
 		if (data_addr[23:18] == 6'b111111) tos192k <= 1'b1;

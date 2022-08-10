@@ -91,11 +91,11 @@ end
 
 // wait 1ms (32 8Mhz cycles) after FPGA config is done before going
 // into normal operation. Initialize the ram in the last 16 reset cycles (cycles 15-0)
-reg [4:0] reset;
+reg [7:0] reset = 8'h1f;
 always @(posedge clk_96 or posedge init) begin
-	if(init)	reset <= 5'h1f;
+	if(init)	reset <= 8'h1f;
 	else if((t == STATE_LAST) && (reset != 0))
-		reset <= reset - 5'd1;
+		reset <= reset - 8'd1;
 end
 
 // ---------------------------------------------------------------------
@@ -140,17 +140,22 @@ always @(posedge clk_96) begin
 	if(reset != 0) begin
 		// initialization takes place at the end of the reset phase
 		if(t == STATE_FIRST) begin
-
-			if(reset == 13) begin
-				sd_cmd <= CMD_PRECHARGE;
-				sd_addr[10] <= 1'b1;      // precharge all banks
-			end
-
-			if(reset == 2) begin
-				sd_cmd <= CMD_LOAD_MODE;
-				sd_addr <= MODE;
-			end
-
+			case (reset)
+				8'd13: begin
+					sd_cmd <= CMD_PRECHARGE;
+					sd_addr[10] <= 1'b1;      // precharge all banks
+				end
+				8'd2: begin
+					sd_cmd <= CMD_LOAD_MODE;
+					sd_addr <= MODE;
+				end
+				default: begin
+					if (!reset[7:5]) begin
+						sd_cmd <= CMD_AUTO_REFRESH;
+						sd_addr[10] <= MODE;
+					end
+				end
+			endcase
 		end
 	end else begin
 		// normal operation
