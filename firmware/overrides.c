@@ -21,6 +21,7 @@
 #include "diskimg.h"
 #include "spi_sd.h"
 #include "user_io.h"
+#include "settings.h"
 
 #undef DEBUG
 
@@ -89,8 +90,8 @@ char *configstring="Atari ST;;"
 	"P3OKL,Scanlines,Off,25%,50%,75%;"
 	"P3OT,Composite blend,Off,On;"
 	"P3OM,Stereo sound,Off,On;"
-	"SC,CFG,Load config;"
-	"SD,CFG,Save config;"
+//	"SS,CFG,Load config;"
+//	"ST,CFG,Save config;"
 	"T0,Reset (Hold for hard reset);"
 	"V,v3.40.";
 static char *cfgptr;
@@ -386,7 +387,7 @@ void toggle_wp(int unit)
 
 int loadimage(const char *filename,int unit);
 
-int loadconfig(const char *filename)
+int loadsettings(const char *filename)
 {
 	int result=0;
 	char *err=0;
@@ -414,7 +415,7 @@ int loadconfig(const char *filename)
 //			printf("config version OK\n");
 			statusword=dat->status|1; /* Core will be in reset when status is next written */
 			statusword&=~(TOS_ACSI0_ENABLE|TOS_ACSI1_ENABLE); /* Disable hard drives, will be re-enabled if HDF opens successfully. */
-			scandouble=dat->scandouble;
+			SetScandouble(dat->scandouble);
 
 			if(ValidateDirectory(dat->romdir))
 			{
@@ -474,12 +475,11 @@ int loadconfig(const char *filename)
 	clearram(16384,3); /* Force hard reset */
 	statusword&=~1; /* Release reset */
 	sendstatus();
-	SetScandouble(scandouble);
 	return(result);
 }
 
 
-int saveconfig(const char *filename)
+int savesettings(const char *filename)
 {
 	putchar('\n');
 	if(FileOpen(&file,filename))
@@ -549,11 +549,11 @@ int loadimage(const char *filename,int unit)
 			result=diskimg[u].file.size;
 			break;
 		/* Configuration files */
-		case 'C': /* Load config */
-			result=loadconfig(filename);
+		case 'S': /* Load settings */
+			result=loadsettings(filename);
 			break;
-		case 'D': /* Save config */
-			result=saveconfig(filename);
+		case 'T': /* Save settings */
+			result=savesettings(filename);
 			break;
 	}
 	statusword&=~1;
@@ -563,7 +563,6 @@ int loadimage(const char *filename,int unit)
 
 
 const char *bootrom_name="TOS     IMG";
-const char *bootcfg_name="MISTERY CFG";
 
 #if 0
 static void interrupthandler()
@@ -583,8 +582,11 @@ char *autoboot()
 	romtype=1;
 	configstring_index=0;
 
-	if(!loadconfig(bootcfg_name))
+//	puts("Loading config\n");
+
+	if(!loadsettings(CONFIG_SETTINGS_FILENAME))
 	{
+//		puts("Config loading failed, loading default ROM\n");
 		sendstatus();
 		setromtype(bootrom_name);
 		if(!loadimage(bootrom_name,0))
@@ -593,6 +595,8 @@ char *autoboot()
 	statusword&=~1;
 	sendstatus();
 
+//	puts("Enabled core\n");
+
 	initc64keys();
 	/* Override the interrupt handler previously set in PS2Init() */
 /*	SetIntHandler(&interrupthandler); */
@@ -600,6 +604,9 @@ char *autoboot()
 	/* Initialise the PS/2 mouse */
 	EnableInterrupts();
 	handlemouse(1);
+
+//	if(result)
+//		puts(result);
 
 	return(result);
 }

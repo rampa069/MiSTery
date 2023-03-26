@@ -175,11 +175,12 @@ void handle_acsi(unsigned char *buffer) {
 	{
 		unsigned int blocks = diskimg[target+2].file.size / 512;
 
+		memset(sector_buffer, 0, 512);
+
 		// only lun0 is fully supported
 		switch(cmd) {
 			case 0x25:
 				if(device == 0) {
-					memset(sector_buffer, 0, 512);
 					sector_buffer[0] = (blocks-1) >> 24;
 					sector_buffer[1] = (blocks-1) >> 16;
 					sector_buffer[2] = (blocks-1) >> 8;
@@ -211,7 +212,6 @@ void handle_acsi(unsigned char *buffer) {
 				if(device != 0)
 					asc[target] = 0x25;
 
-				memset(sector_buffer, 0, 512);
 				sector_buffer[7] = 0x0b;
 				if(asc[target] != 0) {
 					sector_buffer[2] = 0x05;
@@ -277,18 +277,22 @@ void handle_acsi(unsigned char *buffer) {
 					}
 
 					if(lba+length <= blocks) {
+						int timestamp=GetTimer(0);
 						DISKLED_ON;
+						FileSeek(&diskimg[target+2].file, lba<<9);
+						mist_memory_read_block(sector_buffer);
 						while(length) {
-							FileSeek(&diskimg[target+2].file, lba<<9);
-							mist_memory_read_block(sector_buffer);
 							FileWriteSector(&diskimg[target+2].file, sector_buffer);
 							FileNextSector(&diskimg[target+2].file,1);
-							lba++;
+//							lba++;
 							length--;
+							if(length)
+								mist_memory_read_block(sector_buffer);
 						}
 						DISKLED_OFF;
 						dma_ack(0x00);
 						asc[target] = 0x00;
+						timestamp=GetTimer(0)-timestamp;
 					} else {
 //						puts("ACSI: write beyond end of device");
 #ifdef ACSI_DEBUG
@@ -306,7 +310,6 @@ void handle_acsi(unsigned char *buffer) {
 
 			case 0x12: // inquiry
 //			printf("ACSI: Inquiry target %d", target);
-				memset(sector_buffer, 0, 512);
 				sector_buffer[2] = 2;																	 // SCSI-2
 				sector_buffer[4] = length-5;														// len
 				memcpy(sector_buffer+8,	"TC64    ", 8);								// Vendor
@@ -323,7 +326,6 @@ void handle_acsi(unsigned char *buffer) {
 			case 0x1a: // mode sense
 				if(device == 0) {
 //					printf("ACSI: mode sense, blocks = 0x%x", blocks);
-					memset(sector_buffer, 0, 512);
 					sector_buffer[3] = 8;						// size of extent descriptor list
 					sector_buffer[5] = blocks >> 16;
 					sector_buffer[6] = blocks >> 8;

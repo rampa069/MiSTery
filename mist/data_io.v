@@ -141,7 +141,7 @@ always@(negedge sck or posedge ss) begin
 		sdo <= 1;
 	end else begin
 		if(cmd == MIST_READ_MEMORY)
-			sdo <= !bit_cnt ? data_out_reg[{ odd, ~bit_cnt }]: data_out_reg_r[{ odd, ~bit_cnt }];
+			sdo <= (odd && !bit_cnt) ? data_out_reg[{ odd, ~bit_cnt }]: data_out_reg_r[{ odd, ~bit_cnt }];
 		else
 			sdo <= !bit_cnt ? status_in[~bit_cnt] : status_in_r[~bit_cnt];
 	end
