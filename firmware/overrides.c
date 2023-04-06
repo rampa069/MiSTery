@@ -481,7 +481,6 @@ int loadsettings(const char *filename)
 
 int savesettings(const char *filename)
 {
-	putchar('\n');
 	if(FileOpen(&file,filename))
 	{
 		configfile_data.version=1;
